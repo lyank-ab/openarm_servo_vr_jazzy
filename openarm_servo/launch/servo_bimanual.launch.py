@@ -280,6 +280,46 @@ def generate_launch_description():
         actions=[wait_for_joint_states]
     )
 
+    # Start servo nodes and set command type to TWIST after they initialize (~10s after joint states)
+    start_left_servo = TimerAction(
+        period=12.0,
+        actions=[ExecuteProcess(
+            cmd=["ros2", "service", "call",
+                 "/left/servo_node/start_servo",
+                 "std_srvs/srv/Trigger", "{}"],
+            output="screen",
+        )],
+    )
+    start_right_servo = TimerAction(
+        period=12.5,
+        actions=[ExecuteProcess(
+            cmd=["ros2", "service", "call",
+                 "/right/servo_node/start_servo",
+                 "std_srvs/srv/Trigger", "{}"],
+            output="screen",
+        )],
+    )
+    cmd_type_left = TimerAction(
+        period=14.0,
+        actions=[ExecuteProcess(
+            cmd=["ros2", "service", "call",
+                 "/left/servo_node/switch_command_type",
+                 "moveit_msgs/srv/ServoCommandType",
+                 "{command_type: 1}"],
+            output="screen",
+        )],
+    )
+    cmd_type_right = TimerAction(
+        period=14.5,
+        actions=[ExecuteProcess(
+            cmd=["ros2", "service", "call",
+                 "/right/servo_node/switch_command_type",
+                 "moveit_msgs/srv/ServoCommandType",
+                 "{command_type: 1}"],
+            output="screen",
+        )],
+    )
+
     return LaunchDescription(
         [
             use_fake_hardware_arg,
@@ -293,5 +333,9 @@ def generate_launch_description():
             right_gripper_controller_spawner,
             delayed_wait,
             start_servo_after_joint_states,
+            start_left_servo,
+            start_right_servo,
+            cmd_type_left,
+            cmd_type_right,
         ]
     )
