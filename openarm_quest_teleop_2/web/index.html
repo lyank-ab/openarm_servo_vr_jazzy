@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenArm Quest 3 Teleop</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #1a1a2e; color: #e0e0e0;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; min-height: 100vh; padding: 20px;
+        }
+        h1 { font-size: 1.4em; margin-bottom: 20px; color: #00d4ff; }
+        .status {
+            padding: 12px 24px; border-radius: 8px; margin: 8px;
+            font-size: 1em; font-weight: 600; text-align: center;
+        }
+        .connected { background: #0a3d0a; border: 1px solid #0f0; }
+        .disconnected { background: #3d0a0a; border: 1px solid #f00; }
+        .waiting { background: #3d3d0a; border: 1px solid #ff0; }
+        button {
+            padding: 16px 48px; font-size: 1.2em; margin: 16px;
+            border: none; border-radius: 12px; cursor: pointer;
+            font-weight: 700; transition: all 0.2s;
+        }
+        #startVR {
+            background: #00d4ff; color: #000;
+        }
+        #startVR:disabled {
+            background: #444; color: #888; cursor: not-allowed;
+        }
+        .info {
+            max-width: 500px; text-align: center; margin-top: 20px;
+            line-height: 1.6; opacity: 0.7; font-size: 0.9em;
+        }
+        #data { font-family: monospace; font-size: 0.8em; margin-top: 20px;
+                 background: #0d0d1a; padding: 16px; border-radius: 8px;
+                 max-width: 600px; width: 100%; white-space: pre-wrap; }
+        .config {
+            margin: 16px 0; display: flex; gap: 8px; align-items: center;
+        }
+        .config input {
+            padding: 8px 12px; border-radius: 6px; border: 1px solid #444;
+            background: #0d0d1a; color: #e0e0e0; font-size: 1em; width: 200px;
+        }
+        .config label { font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <h1>🤖 OpenArm Quest 3 Teleop</h1>
+
+    <div id="wsStatus" class="status disconnected">WebSocket: Disconnected</div>
+    <div id="xrStatus" class="status disconnected">WebXR: Not started</div>
+
+    <div class="config">
+        <label for="wsUrl">Server:</label>
+        <input id="wsUrl" type="text" placeholder="ws://192.168.1.x:9090">
+    </div>
+
+    <button id="connectWS">Connect WebSocket</button>
+    <button id="startVR" disabled>Enter VR</button>
+
+    <div class="info">
+        <strong>Controls:</strong><br>
+        Grip trigger = deadman switch (hold to move)<br>
+        Index trigger = gripper close<br>
+        Left controller → Left arm<br>
+        Right controller → Right arm
+    </div>
+
+    <div id="data">Waiting for data...</div>
+
+    <script>
+        // ──── Configuration ────
+        let ws = null;
+        let xrSession = null;
+        let xrRefSpace = null;
+        let isConnected = false;
+
+        const wsStatusEl = document.getElementById('wsStatus');
+        const xrStatusEl = document.getElementById('xrStatus');
+        const dataEl = document.getElementById('data');
+        const wsUrlInput = document.getElementById('wsUrl');
+        const connectBtn = document.getElementById('connectWS');
+        const startVRBtn = document.getElementById('startVR');
+
+        // Auto-detect server IP: same host as the page, port 9090
+        // Use wss:// if page is HTTPS, ws:// if HTTP
+        const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const defaultWsUrl = `${scheme}://${window.location.hostname || '192.168.1.2'}:9090`;
+        wsUrlInput.value = defaultWsUrl;
+
+        // ──── WebSocket Connection ────
+        connectBtn.addEventListener('click', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+                return;
+            }
+            const url = wsUrlInput.value.trim();
+            if (!url) return;
+
+            wsStatusEl.textContent = 'WebSocket: Connecting...';
+            wsStatusEl.className = 'status waiting';
+
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                isConnected = true;
+                wsStatusEl.textContent = 'WebSocket: Connected ✓';
+                wsStatusEl.className = 'status connected';
+                connectBtn.textContent = 'Disconnect';
+                checkVRReady();
+            };
+
+            ws.onclose = () => {
+                isConnected = false;
+                wsStatusEl.textContent = 'WebSocket: Disconnected';
+                wsStatusEl.className = 'status disconnected';
+                connectBtn.textContent = 'Connect WebSocket';
+                startVRBtn.disabled = true;
+            };
+
+            ws.onerror = (err) => {
+                wsStatusEl.textContent = 'WebSocket: Error';
+                wsStatusEl.className = 'status disconnected';
+                console.error('WebSocket error:', err);
+            };
+        });
+
+        // ──── WebXR Setup ────
+        function checkVRReady() {
+            if (navigator.xr && isConnected) {
+                navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                    startVRBtn.disabled = !supported;
+                    if (!supported) {
+                        xrStatusEl.textContent = 'WebXR: VR not supported on this device';
+                    }
+                });
+            }
+        }
+
+        startVRBtn.addEventListener('click', async () => {
+            if (xrSession) {
+                xrSession.end();
+                return;
+            }
+
+            try {
+                xrSession = await navigator.xr.requestSession('immersive-vr', {
+                    requiredFeatures: ['local-floor'],
+                    optionalFeatures: ['hand-tracking'],
+                });
+
+                xrStatusEl.textContent = 'WebXR: Active ✓';
+                xrStatusEl.className = 'status connected';
+                startVRBtn.textContent = 'Exit VR';
+
+                xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
+
+                xrSession.addEventListener('end', () => {
+                    xrSession = null;
+                    xrRefSpace = null;
+                    xrStatusEl.textContent = 'WebXR: Ended';
+                    xrStatusEl.className = 'status disconnected';
+                    startVRBtn.textContent = 'Enter VR';
+                });
+
+                // Start the render/tracking loop
+                xrSession.requestAnimationFrame(onXRFrame);
+
+            } catch (err) {
+                console.error('Failed to start VR:', err);
+                xrStatusEl.textContent = `WebXR: Error - ${err.message}`;
+                xrStatusEl.className = 'status disconnected';
+            }
+        });
+
+        // ──── XR Frame Loop ────
+        function onXRFrame(time, frame) {
+            if (!xrSession) return;
+            xrSession.requestAnimationFrame(onXRFrame);
+
+            const payload = {
+                left: null,
+                right: null,
+                timestamp: time / 1000.0,  // ms → seconds
+            };
+
+            for (const source of xrSession.inputSources) {
+                if (!source.gripSpace) continue;
+
+                const pose = frame.getPose(source.gripSpace, xrRefSpace);
+                if (!pose) continue;
+
+                const p = pose.transform.position;
+                const q = pose.transform.orientation;
+
+                // Read gamepad buttons and axes
+                let gripValue = 0;
+                let triggerValue = 0;
+
+                if (source.gamepad) {
+                    // Standard XR gamepad mapping:
+                    // buttons[0] = trigger, buttons[1] = grip
+                    const buttons = source.gamepad.buttons;
+                    if (buttons.length > 0) triggerValue = buttons[0].value;
+                    if (buttons.length > 1) gripValue = buttons[1].value;
+                }
+
+                const controllerData = {
+                    pos: [p.x, p.y, p.z],
+                    rot: [q.x, q.y, q.z, q.w],
+                    grip: gripValue,
+                    trigger: triggerValue,
+                };
+
+                if (source.handedness === 'left') {
+                    payload.left = controllerData;
+                } else if (source.handedness === 'right') {
+                    payload.right = controllerData;
+                }
+            }
+
+            // Send if we have at least one controller
+            if ((payload.left || payload.right) && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(payload));
+
+                // Update debug display (throttled)
+                if (Math.floor(time) % 5 === 0) {
+                    let info = '';
+                    if (payload.left) {
+                        const l = payload.left;
+                        info += `LEFT  pos: ${l.pos.map(v=>v.toFixed(3)).join(', ')}\n`;
+                        info += `      grip: ${l.grip.toFixed(2)}  trigger: ${l.trigger.toFixed(2)}\n`;
+                    }
+                    if (payload.right) {
+                        const r = payload.right;
+                        info += `RIGHT pos: ${r.pos.map(v=>v.toFixed(3)).join(', ')}\n`;
+                        info += `      grip: ${r.grip.toFixed(2)}  trigger: ${r.trigger.toFixed(2)}\n`;
+                    }
+                    dataEl.textContent = info;
+                }
+            }
+        }
+
+        // Initial check
+        checkVRReady();
+    </script>
+</body>
+</html>

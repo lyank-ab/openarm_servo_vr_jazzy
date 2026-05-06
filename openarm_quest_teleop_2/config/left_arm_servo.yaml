@@ -1,0 +1,44 @@
+/**:
+  ros__parameters:
+    moveit_servo:
+      move_group_name: left_arm
+      planning_frame: world
+      ee_frame: openarm_left_hand
+      robot_link_command_frame: openarm_left_hand
+
+      publish_period: 0.02
+      publish_joint_positions: true
+      publish_joint_velocities: false
+      publish_joint_accelerations: false
+
+      command_in_type: speed_units
+      command_out_type: trajectory_msgs/JointTrajectory
+      command_out_topic: /left_joint_trajectory_controller/joint_trajectory
+
+      scale:
+        linear: 0.4
+        rotational: 0.8
+        joint: 0.5
+
+      use_smoothing: true
+      smoothing_filter_plugin_name: online_signal_smoothing::ButterworthFilterPlugin
+
+      lower_singularity_threshold: 10.0
+      hard_stop_singularity_threshold: 30.0
+      leaving_singularity_threshold_multiplier: 2.0
+
+      joint_limit_margins: [0.1]
+
+      check_collisions: true
+      collision_check_rate: 10.0
+      self_collision_proximity_threshold: 0.01
+      scene_collision_proximity_threshold: 0.02
+
+      is_primary_planning_scene_monitor: true
+
+      status_topic: /left/servo_status
+
+      apply_twist_commands_about_ee_frame: true
+      incoming_command_timeout: 0.5
+
+      joint_topic: /joint_states
